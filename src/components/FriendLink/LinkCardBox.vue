@@ -1,6 +1,6 @@
 <template>
   <n-a
-      :href="link.linkLink"
+      :href="formatUrl(link.linkLink)"
       target="_blank"
   >
   <n-card  hoverable>
@@ -25,6 +25,14 @@
 <script setup lang="ts">
 
 const {link}=defineProps({link:{type:Object}})
+
+const formatUrl = (url: string) => {
+  if (!url) return '#';
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return 'http://' + url;
+}
 </script>
 
 <style scoped>

@@ -147,12 +147,13 @@ setTimeout(()=>{
 //新增
 const add_Links=async()=>{
   try {
-    const { linkName, linkLink, linkIcon, linkDescribe } = editLinkModel.value;
+    const { linkName, linkLink, linkIcon, linkDescribe, linkEmail } = editLinkModel.value;
     const response = await createLinkApi({
       link_name: linkName,
       link_link: linkLink,
       link_icon: linkIcon,
-      link_describe: linkDescribe
+      link_describe: linkDescribe,
+      email: linkEmail
     });
     if (response.ec === '0') {
       message.success(response.em);

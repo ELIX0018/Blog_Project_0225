@@ -79,4 +79,7 @@ export const healthCheckApi = () => get('/api/health');
 // 友链相关接口
 export const getLinksApi = () => get('/api/links');
 export const createLinkApi = (data: any) => post('/api/links', data);
+export const getPendingLinksApi = () => get('/api/links/pending');
+export const approveLinkApi = (id: string) => put(`/api/links/${id}/approve`);
+export const rejectLinkApi = (id: string) => del(`/api/links/${id}/reject`);
 
