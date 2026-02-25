@@ -1,6 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/database.js';
+import { authenticateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -25,8 +26,8 @@ router.get('/', (req, res) => {
   });
 });
 
-// 获取所有友链（包括待审核）
-router.get('/all', (req, res) => {
+// 获取所有友链（包括待审核）- 需要管理员权限
+router.get('/all', authenticateToken, requireAdmin, (req, res) => {
   const sql = 'SELECT * FROM links ORDER BY created_at DESC';
   
   db.all(sql, [], (err, rows) => {
@@ -41,6 +42,27 @@ router.get('/all', (req, res) => {
     res.json({
       ec: '0',
       em: '获取友链成功',
+      data: rows
+    });
+  });
+});
+
+// 获取待审核友链列表 - 需要管理员权限
+router.get('/pending', authenticateToken, requireAdmin, (req, res) => {
+  const sql = 'SELECT * FROM links WHERE status = 0 ORDER BY created_at DESC';
+  
+  db.all(sql, [], (err, rows) => {
+    if (err) {
+      console.error('获取待审核友链失败:', err.message);
+      return res.status(500).json({
+        ec: '-1',
+        em: '获取待审核友链失败'
+      });
+    }
+    
+    res.json({
+      ec: '0',
+      em: '获取待审核友链成功',
       data: rows
     });
   });
@@ -89,8 +111,70 @@ router.post('/', (req, res) => {
   });
 });
 
-// 更新友链状态
-router.put('/:id/status', (req, res) => {
+// 审核友链（通过）- 需要管理员权限
+router.put('/:id/approve', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  const sql = `
+    UPDATE links 
+    SET status = 1, updated_at = CURRENT_TIMESTAMP 
+    WHERE id = ?
+  `;
+  
+  db.run(sql, [id], function(err) {
+    if (err) {
+      console.error('审核友链失败:', err.message);
+      return res.status(500).json({
+        ec: '-1',
+        em: '审核友链失败'
+      });
+    }
+    
+    if (this.changes === 0) {
+      return res.status(404).json({
+        ec: '-1',
+        em: '友链不存在'
+      });
+    }
+    
+    res.json({
+      ec: '0',
+      em: '友链审核通过'
+    });
+  });
+});
+
+// 拒绝友链（删除）- 需要管理员权限
+router.delete('/:id/reject', authenticateToken, requireAdmin, (req, res) => {
+  const { id } = req.params;
+  
+  const sql = 'DELETE FROM links WHERE id = ?';
+  
+  db.run(sql, [id], function(err) {
+    if (err) {
+      console.error('拒绝友链失败:', err.message);
+      return res.status(500).json({
+        ec: '-1',
+        em: '拒绝友链失败'
+      });
+    }
+    
+    if (this.changes === 0) {
+      return res.status(404).json({
+        ec: '-1',
+        em: '友链不存在'
+      });
+    }
+    
+    res.json({
+      ec: '0',
+      em: '已拒绝该友链申请'
+    });
+  });
+});
+
+// 更新友链状态 - 需要管理员权限
+router.put('/:id/status', authenticateToken, requireAdmin, (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   
