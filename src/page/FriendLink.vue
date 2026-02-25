@@ -40,6 +40,48 @@
         <n-empty v-if="linkList.length==0 && !loadingEnd" size="large" description="暂无友链">
         </n-empty>
 
+        <!-- 友链申请审核模块 - 仅管理员可见 -->
+        <template v-if="isAdmin">
+          <n-divider />
+          <n-h2 prefix="bar" type="warning">
+            友链申请审核
+          </n-h2>
+          <n-spin :show="pendingLoading">
+            <n-empty v-if="pendingList.length === 0 && !pendingLoading" size="large" description="暂无待审核的友链申请">
+            </n-empty>
+            <n-list v-if="pendingList.length > 0" bordered>
+              <n-list-item v-for="(item, index) in pendingList" :key="item.id">
+                <n-thing>
+                  <template #avatar>
+                    <n-avatar :src="item.link_icon" size="large" fallback-src="https://img.zhangpingguo.com/AppleBlog/logo/logo.jpg" />
+                  </template>
+                  <template #header>
+                    <n-text strong>{{ item.link_name }}</n-text>
+                  </template>
+                  <template #header-extra>
+                    <n-space>
+                      <n-button type="success" size="small" @click="handleApprove(item.id)">
+                        通过
+                      </n-button>
+                      <n-button type="error" size="small" @click="handleReject(item.id)">
+                        拒绝
+                      </n-button>
+                    </n-space>
+                  </template>
+                  <template #description>
+                    <n-space vertical size="small">
+                      <n-text depth="3">链接：{{ item.link_link }}</n-text>
+                      <n-text depth="3">描述：{{ item.link_describe }}</n-text>
+                      <n-text depth="3" v-if="item.link_email">联系邮箱：{{ item.link_email }}</n-text>
+                      <n-text depth="3" type="info">申请时间：{{ formatDate(item.created_at) }}</n-text>
+                    </n-space>
+                  </template>
+                </n-thing>
+              </n-list-item>
+            </n-list>
+          </n-spin>
+        </template>
+
       </n-card>
     </n-gi>
   </n-grid>
@@ -75,17 +117,92 @@ import LinkCard from '../components/MyLinks/LinkCard.vue'
 import {CheckmarkOutline,CloseOutline} from '@vicons/ionicons5'
 import {VaeStore} from "../store";
 import {storeToRefs} from "pinia";
-import {inject, onActivated, ref, onMounted} from "vue";
+import {inject, onActivated, ref, onMounted, computed} from "vue";
 import {useMessage} from "naive-ui";
 import {onBeforeRouteLeave} from "vue-router";
-import {getLinksApi} from "../utils/api";
+import {getLinksApi, getPendingLinksApi, approveLinkApi, rejectLinkApi} from "../utils/api";
 const store = VaeStore();
-let {clientWidth,distanceToBottom,distanceToTop,isdarkTheme} = storeToRefs(store);
+let {clientWidth,distanceToBottom,distanceToTop,isdarkTheme,userInfo} = storeToRefs(store);
 const linkList=ref<any>([]);
 const loadingEnd=ref(false);
 const addlinkShowModal=ref(false);
 const message = useMessage()
 
+// 友链申请审核相关
+const pendingList = ref<any[]>([]);
+const pendingLoading = ref(false);
+
+// 判断是否为管理员
+const isAdmin = computed(() => {
+  return userInfo.value.userPowerId >= 999;
+});
+
+// 格式化日期
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// 获取待审核友链列表
+const getPendingList = async () => {
+  if (!isAdmin.value) return;
+  
+  pendingLoading.value = true;
+  try {
+    const response = await getPendingLinksApi();
+    if (response.ec === '0') {
+      pendingList.value = response.data;
+    } else {
+      message.error(response.em);
+    }
+  } catch (error) {
+    console.error('获取待审核友链失败:', error);
+  } finally {
+    pendingLoading.value = false;
+  }
+};
+
+// 审核通过
+const handleApprove = async (id: string) => {
+  try {
+    const response = await approveLinkApi(id);
+    if (response.ec === '0') {
+      message.success('审核通过成功');
+      // 刷新列表
+      getPendingList();
+      get_LinksAll();
+    } else {
+      message.error(response.em);
+    }
+  } catch (error) {
+    message.error('审核失败，请稍后重试');
+    console.error('审核通过失败:', error);
+  }
+};
+
+// 拒绝申请
+const handleReject = async (id: string) => {
+  try {
+    const response = await rejectLinkApi(id);
+    if (response.ec === '0') {
+      message.success('已拒绝该申请');
+      // 刷新列表
+      getPendingList();
+    } else {
+      message.error(response.em);
+    }
+  } catch (error) {
+    message.error('操作失败，请稍后重试');
+    console.error('拒绝申请失败:', error);
+  }
+};
 
 const closeBtn=()=>{
   addlinkShowModal.value=false;
@@ -116,6 +233,7 @@ const get_LinksAll=async()=>{
 // 组件挂载时获取友链列表
 onMounted(() => {
   get_LinksAll();
+  getPendingList();
 });
 
 //滚动条回到原位
