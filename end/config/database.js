@@ -109,7 +109,8 @@ export const initDatabase = () => {
         link_link TEXT NOT NULL,
         link_icon TEXT,
         link_describe TEXT,
-        status INTEGER DEFAULT 1, -- 1: 已通过, 0: 待审核
+        link_email TEXT, -- 申请人联系邮箱
+        status INTEGER DEFAULT 0, -- 0: 待审核, 1: 已通过, 2: 已拒绝
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
