@@ -28,6 +28,56 @@
         <br>
         <n-text depth="3">温馨提示：本站友链随机排列，不定时清除失效友链。</n-text>
         <n-divider />
+        
+        <!-- 管理员审核模块 -->
+        <template v-if="isAdmin">
+          <n-h2 prefix="bar" type="warning" >
+            待审核友链
+            <n-badge :value="pendingLinks.length" :max="99" type="warning" style="margin-left: 10px;" />
+          </n-h2>
+          <n-spin :show="pendingLoading">
+            <n-empty v-if="pendingLinks.length === 0" size="small" description="暂无待审核友链" style="margin: 20px 0;">
+            </n-empty>
+            <n-grid x-gap="12" :cols="4" item-responsive v-else>
+              <n-gi span="4 400:2 800:2 1075:1" v-for="(link, index) in pendingLinks" :key="index">
+                <n-card hoverable size="small" :embedded="isdarkTheme">
+                  <n-thing>
+                    <template #avatar>
+                      <n-avatar size="medium" :src="link.link_icon" fallback-src="https://img.zhangpingguo.com/AppleBlog/logo/logo.jpg" />
+                    </template>
+                    <template #header>
+                      {{ link.link_name }}
+                    </template>
+                    <template #header-extra>
+                      <n-tag type="warning" size="small">待审核</n-tag>
+                    </template>
+                    <n-ellipsis expand-trigger="click" line-clamp="2" style="min-height: 40px" :tooltip="false">
+                      {{ link.link_describe }}
+                    </n-ellipsis>
+                    <template #footer>
+                      <n-text depth="3" style="font-size: 12px;">
+                        网址：{{ link.link_link }}
+                      </n-text>
+                    </template>
+                    <template #action>
+                      <n-space>
+                        <n-button type="success" size="small" @click="handleApprove(link.id)">
+                          通过
+                        </n-button>
+                        <n-button type="error" size="small" @click="handleReject(link.id)">
+                          拒绝
+                        </n-button>
+                      </n-space>
+                    </template>
+                  </n-thing>
+                </n-card>
+                <br>
+              </n-gi>
+            </n-grid>
+          </n-spin>
+          <n-divider />
+        </template>
+        
         <n-h2 prefix="bar" type="info" >
           友链列表
         </n-h2>
@@ -63,7 +113,7 @@
         </n-button>
       </template>
 <!--      编辑获取新增友链卡片-->
-      <LinkCard  @closeBtn="closeBtn" @linkAdded="get_LinksAll"  :isAdd="true"></LinkCard>
+      <LinkCard  @closeBtn="closeBtn" @linkAdded="handleLinkAdded"  :isAdd="true"></LinkCard>
     </n-card>
   </n-modal>
 </template>
@@ -75,22 +125,27 @@ import LinkCard from '../components/MyLinks/LinkCard.vue'
 import {CheckmarkOutline,CloseOutline} from '@vicons/ionicons5'
 import {VaeStore} from "../store";
 import {storeToRefs} from "pinia";
-import {inject, onActivated, ref, onMounted} from "vue";
+import {inject, onActivated, ref, onMounted, computed} from "vue";
 import {useMessage} from "naive-ui";
 import {onBeforeRouteLeave} from "vue-router";
-import {getLinksApi} from "../utils/api";
+import {getLinksApi, getPendingLinksApi, approveLinkApi, rejectLinkApi} from "../utils/api";
 const store = VaeStore();
-let {clientWidth,distanceToBottom,distanceToTop,isdarkTheme} = storeToRefs(store);
+let {clientWidth,distanceToBottom,distanceToTop,isdarkTheme,userInfo} = storeToRefs(store);
 const linkList=ref<any>([]);
 const loadingEnd=ref(false);
 const addlinkShowModal=ref(false);
 const message = useMessage()
 
+const pendingLinks = ref<any>([]);
+const pendingLoading = ref(false);
+
+const isAdmin = computed(() => {
+  return userInfo.value && userInfo.value.userPowerId >= 999;
+});
 
 const closeBtn=()=>{
   addlinkShowModal.value=false;
 }
-
 
 const get_LinksAll=async()=>{
   try {
@@ -113,9 +168,65 @@ const get_LinksAll=async()=>{
   }
 }
 
+const get_PendingLinks = async () => {
+  if (!isAdmin.value) return;
+  
+  pendingLoading.value = true;
+  try {
+    const response = await getPendingLinksApi();
+    if (response.ec === '0') {
+      pendingLinks.value = response.data;
+    } else {
+      message.error(response.em);
+    }
+  } catch (error) {
+    console.error('获取待审核友链失败:', error);
+  } finally {
+    pendingLoading.value = false;
+  }
+}
+
+const handleApprove = async (id: string) => {
+  try {
+    const response = await approveLinkApi(id);
+    if (response.ec === '0') {
+      message.success('友链审核通过');
+      await Promise.all([get_LinksAll(), get_PendingLinks()]);
+    } else {
+      message.error(response.em);
+    }
+  } catch (error) {
+    message.error('审核操作失败');
+    console.error('审核失败:', error);
+  }
+}
+
+const handleReject = async (id: string) => {
+  try {
+    const response = await rejectLinkApi(id);
+    if (response.ec === '0') {
+      message.success('已拒绝该友链申请');
+      await get_PendingLinks();
+    } else {
+      message.error(response.em);
+    }
+  } catch (error) {
+    message.error('拒绝操作失败');
+    console.error('拒绝失败:', error);
+  }
+}
+
+const handleLinkAdded = () => {
+  get_LinksAll();
+  if (isAdmin.value) {
+    get_PendingLinks();
+  }
+}
+
 // 组件挂载时获取友链列表
 onMounted(() => {
   get_LinksAll();
+  get_PendingLinks();
 });
 
 //滚动条回到原位
